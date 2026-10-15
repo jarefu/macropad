@@ -151,4 +151,594 @@
     <!-- RIGHT: CONFIGURATION FORMS -->
     <div>
       <!-- PAGE / PROFILE SETTINGS -->
-      <div class="
+      <div class="card" style="margin-bottom: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <h2 style="margin:0;">Page / Profile Settings</h2>
+          <div style="display:flex; gap:8px;">
+            <label style="display:flex; align-items:center; gap:6px; margin:0; cursor:pointer; color:var(--text);">
+              <input type="checkbox" id="chkSound" onchange="updateGlobalSound()"> Beep Sound
+            </label>
+            <button onclick="addNewProfile()" style="padding:4px 10px; font-size:0.8rem;">+ New Page</button>
+            <button class="danger" onclick="deleteProfile()" style="padding:4px 10px; font-size:0.8rem;">Delete Page</button>
+          </div>
+        </div>
+
+        <div class="form-row" style="grid-template-columns: 1.2fr 1fr 1fr 1fr; margin-bottom:0;">
+          <div>
+            <label>Selected Page</label>
+            <select id="selProfile" onchange="selectProfile(this.value)"></select>
+          </div>
+          <div>
+            <label>Page Name (Max 6)</label>
+            <input type="text" id="inpProfName" maxlength="6" oninput="updateProfileMeta()">
+          </div>
+          <div>
+            <label>Target OS</label>
+            <select id="selProfOS" onchange="updateProfileMeta()">
+              <option value="PC">PC (Win/Linux)</option>
+              <option value="MAC">MAC (macOS)</option>
+            </select>
+          </div>
+          <div>
+            <label>Page Theme Colour</label>
+            <select id="selProfTheme" onchange="updateProfileMeta()"></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- SELECTED KEY EDITOR -->
+      <div class="card">
+        <h2 id="keyEditorTitle">Editing Key #1</h2>
+
+        <label>Quick Presets (Click to apply to this key)</label>
+        <div id="presetBar" class="preset-bar"></div>
+
+        <div class="form-row">
+          <div>
+            <label>Key Display Label (Max 6 chars)</label>
+            <input type="text" id="inpKeyLabel" maxlength="6" oninput="saveKeyChanges()">
+          </div>
+          <div>
+            <label>Action Type</label>
+            <select id="selKeyType" onchange="onKeyTypeChange()">
+              <option value="COMBO">Key Combination</option>
+              <option value="TEXT">Text String / Macro</option>
+              <option value="MEDIA">Media Control</option>
+              <option value="SPECIAL">Special (Mouse Jiggler)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- DYNAMIC ACTION FIELDS -->
+        <div id="sectionCombo">
+          <div class="form-group">
+            <label>Modifiers (Click to toggle)</label>
+            <div id="modPills" class="mods-grid"></div>
+          </div>
+          <div class="form-group">
+            <label>Primary Key</label>
+            <select id="selComboKey" onchange="saveKeyChanges()"></select>
+          </div>
+        </div>
+
+        <div id="sectionText" style="display:none;">
+          <div class="form-group">
+            <label>Text to Type (Supports Enter/Newlines, Max 120 chars)</label>
+            <textarea id="inpKeyText" maxlength="120" oninput="saveKeyChanges()"></textarea>
+          </div>
+        </div>
+
+        <div id="sectionMedia" style="display:none;">
+          <div class="form-group">
+            <label>Media Function</label>
+            <select id="selMediaAction" onchange="saveKeyChanges()">
+              <option value="VOL_UP">Volume Up</option>
+              <option value="VOL_DOWN">Volume Down</option>
+              <option value="MUTE">Mute</option>
+              <option value="PLAY_PAUSE">Play / Pause</option>
+              <option value="NEXT">Next Track</option>
+              <option value="PREV">Previous Track</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="sectionSpecial" style="display:none;">
+          <div class="form-group">
+            <label>Special Function</label>
+            <select id="selSpecialAction" onchange="saveKeyChanges()">
+              <option value="JIGGLER">Mouse Jiggler (Moves cursor every 30s when toggled)</option>
+            </select>
+          </div>
+        </div>
+
+        <hr>
+
+        <div class="form-row" style="margin-bottom:0;">
+          <div>
+            <label>LED Colour Override</label>
+            <select id="selKeyColor" onchange="saveKeyChanges()"></select>
+          </div>
+          <div>
+            <label>Switch Behaviour</label>
+            <select id="selKeyBehavior" onchange="saveKeyChanges()">
+              <option value="NORMAL">NORMAL (One-shot press)</option>
+              <option value="HOLD">HOLD (Active while held)</option>
+              <option value="TOGGLE">TOGGLE (Latch on/off)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast">Saved!</div>
+
+<script>
+// ============================================================================
+// CONSTANTS MATCHING CIRCUITPYTHON CODE.PY
+// ============================================================================
+const KEY_NAMES = [
+  "A","B","C","D","E","F","G","H","I","J","K","L","M",
+  "N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+  "0","1","2","3","4","5","6","7","8","9",
+  "F1","F2","F3","F4","F5","F6","F7","F8","F9","F10","F11","F12",
+  "ENTER","ESC","BACKSP","TAB","SPACE","DELETE","UP","DOWN","LEFT","RIGHT"
+];
+
+const COLOR_PALETTE = [
+  { name: "Page Default", val: null, css: null },
+  { name: "Soft Blue",    val: 0x002244, css: "#0055aa" },
+  { name: "Purple",       val: 0x330044, css: "#8800bb" },
+  { name: "Red",          val: 0x550000, css: "#dd1111" },
+  { name: "Green",        val: 0x005500, css: "#00bb22" },
+  { name: "Deep Blue",    val: 0x001166, css: "#1133ee" },
+  { name: "Yellow",       val: 0x444400, css: "#cccc00" },
+  { name: "Cyan",         val: 0x004444, css: "#00bbbb" },
+  { name: "Magenta",      val: 0x440044, css: "#cc00cc" },
+  { name: "Orange",       val: 0x551800, css: "#ee5500" },
+  { name: "Pink",         val: 0x550822, css: "#ee2266" },
+  { name: "White",        val: 0x333333, css: "#aaaaaa" },
+  { name: "Off",          val: 0x000000, css: "#181a20" }
+];
+
+const MOD_LIST = [
+  { id: "OS", label: "OS (Ctrl/Cmd)" },
+  { id: "SHIFT", label: "SHIFT" },
+  { id: "ALT", label: "ALT / OPT" },
+  { id: "CTRL", label: "CTRL" },
+  { id: "GUI", label: "GUI / CMD" },
+  { id: "OS_SCREEN", label: "OS Screenshot" },
+  { id: "OS_SWITCH", label: "OS App Switch" }
+];
+
+const PRESETS = [
+  {"label": "Copy",   "type": "COMBO",   "mods": ["OS"],          "key": "C",   "color": null, "behavior": "NORMAL"},
+  {"label": "Paste",  "type": "COMBO",   "mods": ["OS"],          "key": "V",   "color": null, "behavior": "NORMAL"},
+  {"label": "Cut",    "type": "COMBO",   "mods": ["OS"],          "key": "X",   "color": null, "behavior": "NORMAL"},
+  {"label": "Undo",   "type": "COMBO",   "mods": ["OS"],          "key": "Z",   "color": null, "behavior": "NORMAL"},
+  {"label": "Redo",   "type": "COMBO",   "mods": ["OS", "SHIFT"], "key": "Z",   "color": null, "behavior": "NORMAL"},
+  {"label": "Save",   "type": "COMBO",   "mods": ["OS"],          "key": "S",   "color": null, "behavior": "NORMAL"},
+  {"label": "Vol+",   "type": "MEDIA",   "action": "VOL_UP",      "color": null, "behavior": "HOLD"},
+  {"label": "Vol-",   "type": "MEDIA",   "action": "VOL_DOWN",    "color": null, "behavior": "HOLD"},
+  {"label": "Mute",   "type": "MEDIA",   "action": "MUTE",        "color": null, "behavior": "NORMAL"},
+  {"label": "Play",   "type": "MEDIA",   "action": "PLAY_PAUSE",  "color": null, "behavior": "NORMAL"},
+  {"label": "Jiggle", "type": "SPECIAL", "action": "JIGGLER",     "color": 0x004400, "behavior": "TOGGLE"},
+  {"label": "Screen", "type": "COMBO",   "mods": ["OS_SCREEN"],   "key": "S",   "color": null, "behavior": "NORMAL"}
+];
+
+// ============================================================================
+// STATE
+// ============================================================================
+let config = {
+  active: 0,
+  sound: true,
+  profiles: [
+    { name: "PC 1", os: "PC", theme: 0x002244, keys: JSON.parse(JSON.stringify(PRESETS)) },
+    { name: "MAC 1", os: "MAC", theme: 0x330044, keys: JSON.parse(JSON.stringify(PRESETS)) }
+  ]
+};
+let selectedKey = 0;
+let activeMods = [];
+
+// WebSerial state
+let port = null;
+let reader = null;
+let serialBuffer = "";
+
+// ============================================================================
+// INITIALIZATION & UI RENDERING
+// ============================================================================
+function initUI() {
+  const themeSel = document.getElementById("selProfTheme");
+  const keyColSel = document.getElementById("selKeyColor");
+  COLOR_PALETTE.forEach((c, idx) => {
+    const opt = new Option(c.name, c.val === null ? "null" : c.val);
+    keyColSel.add(opt);
+    if (idx > 0) themeSel.add(new Option(c.name, c.val));
+  });
+
+  const keySel = document.getElementById("selComboKey");
+  KEY_NAMES.forEach(k => keySel.add(new Option(k, k)));
+
+  const modContainer = document.getElementById("modPills");
+  MOD_LIST.forEach(m => {
+    const pill = document.createElement("div");
+    pill.className = "mod-pill";
+    pill.textContent = m.label;
+    pill.dataset.mod = m.id;
+    pill.onclick = () => toggleMod(m.id);
+    modContainer.appendChild(pill);
+  });
+
+  const presetBar = document.getElementById("presetBar");
+  PRESETS.forEach((p, idx) => {
+    const btn = document.createElement("button");
+    btn.className = "preset-btn";
+    btn.textContent = p.label;
+    btn.onclick = () => applyPreset(idx);
+    presetBar.appendChild(btn);
+  });
+
+  refreshAll();
+}
+
+function getCssColor(intVal, fallbackInt) {
+  const target = (intVal === null || intVal === undefined) ? fallbackInt : intVal;
+  const match = COLOR_PALETTE.find(c => c.val === target);
+  if (match && match.css) return match.css;
+  if (typeof target === "number") {
+    return "#" + target.toString(16).padStart(6, "0");
+  }
+  return "#0055aa";
+}
+
+function formatCell(lbl) {
+  const s = (lbl || "").slice(0, 6);
+  return s + " ".repeat(6 - s.length);
+}
+
+function refreshAll() {
+  const prof = config.profiles[config.active];
+  
+  const selProf = document.getElementById("selProfile");
+  selProf.innerHTML = "";
+  config.profiles.forEach((p, idx) => {
+    selProf.add(new Option(`${idx + 1}: ${p.name} (${p.os})`, idx));
+  });
+  selProf.value = config.active;
+
+  document.getElementById("chkSound").checked = config.sound !== false;
+  document.getElementById("inpProfName").value = prof.name;
+  document.getElementById("selProfOS").value = prof.os;
+  document.getElementById("selProfTheme").value = prof.theme;
+
+  const snd = config.sound !== false ? "S:ON" : "S:OFF";
+  let oledText = `${config.active + 1}/${config.profiles.length} ${prof.name} ${snd}\n`;
+  for (let r = 0; r < 4; r++) {
+    const c0 = formatCell(prof.keys[r * 3].label);
+    const c1 = formatCell(prof.keys[r * 3 + 1].label);
+    const c2 = formatCell(prof.keys[r * 3 + 2].label);
+    oledText += `${c0} ${c1} ${c2}\n`;
+  }
+  document.getElementById("oledPreview").textContent = oledText;
+
+  const grid = document.getElementById("keyGrid");
+  grid.innerHTML = "";
+  prof.keys.forEach((kItem, idx) => {
+    const cap = document.createElement("div");
+    cap.className = "keycap" + (idx === selectedKey ? " selected" : "");
+    const bgCss = getCssColor(kItem.color, prof.theme);
+    cap.style.background = `radial-gradient(circle at 50% 30%, ${bgCss}88, ${bgCss}22 85%)`;
+    cap.style.borderColor = idx === selectedKey ? "#fff" : bgCss;
+
+    cap.innerHTML = `
+      <span class="key-num">${idx + 1}</span>
+      <span class="key-lbl">${kItem.label || "Macro"}</span>
+      <span class="key-type">${kItem.type || "COMBO"}</span>
+    `;
+    cap.onclick = () => { selectedKey = idx; refreshAll(); };
+    grid.appendChild(cap);
+  });
+
+  loadKeyIntoForm();
+}
+
+function loadKeyIntoForm() {
+  const prof = config.profiles[config.active];
+  const kItem = prof.keys[selectedKey];
+
+  document.getElementById("keyEditorTitle").textContent = `Editing Key #${selectedKey + 1} (${kItem.label})`;
+  document.getElementById("inpKeyLabel").value = kItem.label || "";
+  document.getElementById("selKeyType").value = kItem.type || "COMBO";
+  document.getElementById("selKeyColor").value = (kItem.color === null || kItem.color === undefined) ? "null" : kItem.color;
+  document.getElementById("selKeyBehavior").value = kItem.behavior || "NORMAL";
+
+  activeMods = Array.isArray(kItem.mods) ? [...kItem.mods] : [];
+  document.querySelectorAll(".mod-pill").forEach(pill => {
+    pill.classList.toggle("active", activeMods.includes(pill.dataset.mod));
+  });
+
+  document.getElementById("selComboKey").value = kItem.key || "A";
+  document.getElementById("inpKeyText").value = kItem.text || "";
+  document.getElementById("selMediaAction").value = kItem.action || "VOL_UP";
+  document.getElementById("selSpecialAction").value = kItem.action || "JIGGLER";
+
+  updateVisibleSections();
+}
+
+function updateVisibleSections() {
+  const type = document.getElementById("selKeyType").value;
+  document.getElementById("sectionCombo").style.display   = type === "COMBO" ? "block" : "none";
+  document.getElementById("sectionText").style.display    = type === "TEXT" ? "block" : "none";
+  document.getElementById("sectionMedia").style.display   = type === "MEDIA" ? "block" : "none";
+  document.getElementById("sectionSpecial").style.display = type === "SPECIAL" ? "block" : "none";
+}
+
+// ============================================================================
+// EDIT HANDLERS
+// ============================================================================
+function onKeyTypeChange() {
+  updateVisibleSections();
+  saveKeyChanges();
+}
+
+function toggleMod(modId) {
+  if (activeMods.includes(modId)) {
+    activeMods = activeMods.filter(m => m !== modId);
+  } else {
+    activeMods.push(modId);
+  }
+  document.querySelectorAll(".mod-pill").forEach(pill => {
+    pill.classList.toggle("active", activeMods.includes(pill.dataset.mod));
+  });
+  saveKeyChanges();
+}
+
+function saveKeyChanges() {
+  const prof = config.profiles[config.active];
+  const type = document.getElementById("selKeyType").value;
+  const colRaw = document.getElementById("selKeyColor").value;
+  const color = colRaw === "null" ? null : parseInt(colRaw, 10);
+  const behavior = document.getElementById("selKeyBehavior").value;
+  const label = document.getElementById("inpKeyLabel").value.slice(0, 6) || "Macro";
+
+  const updated = { label, type, color, behavior };
+
+  if (type === "COMBO") {
+    updated.mods = [...activeMods];
+    updated.key = document.getElementById("selComboKey").value;
+  } else if (type === "TEXT") {
+    updated.text = document.getElementById("inpKeyText").value;
+  } else if (type === "MEDIA") {
+    updated.action = document.getElementById("selMediaAction").value;
+  } else if (type === "SPECIAL") {
+    updated.action = document.getElementById("selSpecialAction").value;
+  }
+
+  prof.keys[selectedKey] = updated;
+  refreshAll();
+}
+
+function applyPreset(presetIdx) {
+  const prof = config.profiles[config.active];
+  const existingColor = prof.keys[selectedKey].color;
+  const copy = JSON.parse(JSON.stringify(PRESETS[presetIdx]));
+  if (copy.color === null) copy.color = existingColor;
+  prof.keys[selectedKey] = copy;
+  refreshAll();
+  showToast(`Applied "${copy.label}" preset to Key #${selectedKey + 1}`);
+}
+
+function selectProfile(idx) {
+  config.active = parseInt(idx, 10);
+  refreshAll();
+}
+
+function cycleProfile() {
+  config.active = (config.active + 1) % config.profiles.length;
+  refreshAll();
+}
+
+function updateGlobalSound() {
+  config.sound = document.getElementById("chkSound").checked;
+  refreshAll();
+}
+
+function updateProfileMeta() {
+  const prof = config.profiles[config.active];
+  prof.name = document.getElementById("inpProfName").value.slice(0, 6) || "PAGE";
+  prof.os = document.getElementById("selProfOS").value;
+  prof.theme = parseInt(document.getElementById("selProfTheme").value, 10);
+  refreshAll();
+}
+
+function addNewProfile() {
+  const num = config.profiles.length + 1;
+  config.profiles.push({
+    name: `PC ${num}`.slice(0, 6),
+    os: "PC",
+    theme: 0x002244,
+    keys: JSON.parse(JSON.stringify(PRESETS))
+  });
+  config.active = config.profiles.length - 1;
+  refreshAll();
+  showToast("Added new page!");
+}
+
+function deleteProfile() {
+  if (config.profiles.length <= 1) {
+    showToast("Must keep at least 1 page!");
+    return;
+  }
+  config.profiles.splice(config.active, 1);
+  config.active = config.active % config.profiles.length;
+  refreshAll();
+  showToast("Page deleted.");
+}
+
+// ============================================================================
+// WEBSERIAL COMMUNICATION
+// ============================================================================
+async function connectSerial() {
+  if (!("serial" in navigator)) {
+    alert("WebSerial is not supported in this browser. Please use Chrome, Edge, or Brave.");
+    return;
+  }
+  try {
+    if (port) {
+      try { await port.close(); } catch (e) {}
+      port = null;
+    }
+
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+
+    // Assert DTR & RTS so Windows USB CDC driver opens the data stream immediately
+    await port.setSignals({ dataTerminalReady: true, requestToSend: true });
+
+    document.getElementById("statusDot").classList.add("connected");
+    document.getElementById("btnConnect").textContent = "Switch Port";
+    document.getElementById("btnPull").disabled = false;
+    document.getElementById("btnPush").disabled = false;
+
+    readLoop();
+
+    // Send initial config request after port settles
+    setTimeout(() => {
+      requestConfig();
+    }, 250);
+
+  } catch (err) {
+    console.error("Connection error:", err);
+    showToast("Connection cancelled or failed.");
+  }
+}
+
+async function readLoop() {
+  const decoder = new TextDecoder();
+  try {
+    while (port && port.readable) {
+      reader = port.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (value) {
+            serialBuffer += decoder.decode(value, { stream: true });
+            let lines = serialBuffer.split(/\r?\n/);
+            serialBuffer = lines.pop();
+
+            for (let line of lines) {
+              line = line.trim();
+              if (!line) continue;
+              console.log("RX from MacroPad:", line);
+
+              const cfgIdx = line.indexOf("CONFIG_DATA:");
+              if (cfgIdx !== -1) {
+                try {
+                  const jsonStr = line.substring(cfgIdx + 12);
+                  const parsed = JSON.parse(jsonStr);
+                  if (parsed && parsed.profiles) {
+                    config = parsed;
+                    refreshAll();
+                    showToast("Loaded configuration from MacroPad!");
+                  }
+                } catch (e) {
+                  console.error("JSON Parse error:", e);
+                }
+              } else if (line.includes("STATUS:OK")) {
+                showToast("Saved to MacroPad & updated OLED!");
+              } else if (line.includes("STATUS:ERR:")) {
+                showToast("MacroPad Error: " + line.split("STATUS:ERR:")[1]);
+              }
+            }
+          }
+        }
+      } catch (readErr) {
+        console.error("Reader loop error:", readErr);
+      } finally {
+        reader.releaseLock();
+      }
+    }
+  } catch (err) {
+    console.error("readLoop stopped:", err);
+  }
+}
+
+async function sendCommand(cmdStr) {
+  if (!port || !port.writable) {
+    showToast("Not connected to MacroPad!");
+    return;
+  }
+  const writer = port.writable.getWriter();
+  try {
+    const encoder = new TextEncoder();
+    // Send both \r\n so CircuitPython console or data port triggers cleanly
+    const data = encoder.encode("\n" + cmdStr + "\r\n");
+
+    const chunkSize = 64;
+    for (let i = 0; i < data.length; i += chunkSize) {
+      await writer.write(data.slice(i, i + chunkSize));
+      await new Promise(r => setTimeout(r, 8));
+    }
+  } catch (err) {
+    console.error("Write error:", err);
+    showToast("Write error - click 'Switch Port' and try the other COM port!");
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+async function requestConfig() {
+  console.log("Sending GET_CONFIG to MacroPad...");
+  await sendCommand("GET_CONFIG");
+}
+
+async function pushConfig() {
+  const payload = "SET_CONFIG:" + JSON.stringify(config);
+  console.log("Sending SET_CONFIG to MacroPad...");
+  await sendCommand(payload);
+}
+
+// ============================================================================
+// JSON FILE EXPORT / IMPORT
+// ============================================================================
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "macros_v4.json";
+  a.click();
+}
+
+function importJSON(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data && Array.isArray(data.profiles)) {
+        config = data;
+        refreshAll();
+        showToast("Imported JSON file! Click 'Save to MacroPad' to apply.");
+      }
+    } catch (err) {
+      alert("Invalid JSON file.");
+    }
+  };
+  r.readAsText(file);
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 3200);
+}
+
+initUI();
+</script>
+</body>
+</html>
