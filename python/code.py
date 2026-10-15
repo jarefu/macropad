@@ -70,6 +70,9 @@ PRESETS = [
     {"label": "Play",   "type": "MEDIA",   "action": "PLAY_PAUSE",  "color": None, "behavior": "NORMAL"},
     {"label": "Jiggle", "type": "SPECIAL","action": "JIGGLER",     "color": 0x004400, "behavior": "TOGGLE"},
     {"label": "Screen", "type": "COMBO",   "mods": ["OS_SCREEN"],   "key": "S",   "color": None, "behavior": "NORMAL"},
+    {"label": "K-Vol",  "type": "KNOB",    "action": "VOLUME",      "color": 0x004444, "behavior": "TOGGLE"},
+    {"label": "K-ScV",  "type": "KNOB",    "action": "SCROLL_V",    "color": 0x440044, "behavior": "TOGGLE"},
+    {"label": "K-Zoom", "type": "KNOB",    "action": "ZOOM",        "color": 0x444400, "behavior": "TOGGLE"},
 ]
 
 TEXT_PAGES_LOWER = [
@@ -117,13 +120,13 @@ def default_config():
                 "name": "PC 1",
                 "os": "PC",
                 "theme": 0x002244,
-                "keys": clone_keys(PRESETS)
+                "keys": clone_keys(PRESETS[:12])
             },
             {
                 "name": "MAC 1",
                 "os": "MAC",
                 "theme": 0x330044,
-                "keys": clone_keys(PRESETS)
+                "keys": clone_keys(PRESETS[:12])
             }
         ]
     }
@@ -193,14 +196,26 @@ temp_page_theme = 0x002244
 is_creating_page = False
 
 active_toggles = set()
+active_knob_key = None
 last_activity_time = time.monotonic()
 is_sleeping = False
 
-EDIT_TYPES = ["Pick Preset", "New Key Combo", "New Text String", "Set Key Colour", "Set Key Behaviour", "Cancel"]
+EDIT_TYPES = ["Pick Preset", "New Key Combo", "New Text String", "Knob Function", "Set Key Colour", "Set Key Behaviour", "Cancel"]
 BEHAVIOR_OPTIONS = ["NORMAL (One-shot)", "HOLD (Hold down)", "TOGGLE (Latch on/off)"]
 PAGE_MENU_OPTS = ["Add New Page", "Edit Current Page", "Toggle Sound", "Delete This Page", "Cancel"]
 MOD_OPTIONS = ["[NEXT -> Key]", "OS (Ctrl/Cmd)", "SHIFT", "ALT/OPT", "CTRL", "GUI/CMD"]
 OS_OPTIONS = ["PC (Win/Linux)", "MAC (macOS)"]
+
+KNOB_ACTIONS = [
+    ("Volume Control", "VOLUME",     "K-Vol"),
+    ("Vert Scroll",    "SCROLL_V",   "K-ScV"),
+    ("Horiz Scroll",   "SCROLL_H",   "K-ScH"),
+    ("Zoom In/Out",    "ZOOM",       "K-Zoom"),
+    ("Media Track",    "TRACK",      "K-Trk"),
+    ("Next/Prev Tab",  "TABS",       "K-Tabs"),
+    ("Undo / Redo",    "UNDO_REDO",  "K-Undo"),
+    ("Brightness",     "BRIGHTNESS", "K-Brt"),
+]
 
 def play_sound(freq, duration):
     if config.get("sound", True):
@@ -245,7 +260,9 @@ def update_leds():
 
     for i in range(12):
         if mode == "OVERVIEW":
-            if i in active_toggles:
+            if i == active_knob_key:
+                macropad.pixels[i] = 0x00FFFF
+            elif i in active_toggles:
                 macropad.pixels[i] = 0xFF5500
             else:
                 macropad.pixels[i] = get_key_color(i)
@@ -278,7 +295,13 @@ def render_screen(status=None):
         total = len(config["profiles"])
         idx = config["active"] + 1
         snd = "S:ON" if config.get("sound", True) else "S:OFF"
-        hdr = f"{idx}/{total} {prof['name']} {snd}" if not status else status
+        if status:
+            hdr = status
+        elif active_knob_key is not None and active_knob_key < len(prof["keys"]):
+            k_act = prof["keys"][active_knob_key].get("action", "KNOB")
+            hdr = f"{idx}/{total} [{k_act[:6]}] {snd}"
+        else:
+            hdr = f"{idx}/{total} {prof['name']} {snd}"
         set_line(0, hdr[:21])
         for r in range(4):
             c0 = format_cell(prof["keys"][r * 3]["label"])
@@ -323,6 +346,14 @@ def render_screen(status=None):
         set_line(0, f"KEY #{selected_key + 1}: {prof['keys'][selected_key]['label']}")
         set_line(1, f"> {EDIT_TYPES[menu_idx]}")
         set_line(2, "Turn:Scroll Push:OK")
+        set_line(3, "")
+        set_line(4, "")
+
+    elif mode == "PICK_KNOB_ACTION":
+        act_label, _, _ = KNOB_ACTIONS[menu_idx]
+        set_line(0, f"KEY #{selected_key + 1} KNOB MODE:")
+        set_line(1, f"> {act_label[:19]}")
+        set_line(2, "Turn:Scroll Push:Next")
         set_line(3, "")
         set_line(4, "")
 
@@ -478,6 +509,115 @@ def execute_action(item, state_active=True):
                 time.sleep(0.05)
                 macropad.mouse.move(x=-2)
 
+def execute_knob_rotate(step, curr_dir):
+    prof = cur_prof()
+    if active_knob_key is None or active_knob_key >= len(prof["keys"]):
+        return
+    item = prof["keys"][active_knob_key]
+    action = item.get("action", "VOLUME")
+    is_mac = (prof.get("os") == "MAC")
+    cc = macropad.consumer_control
+
+    if action == "VOLUME":
+        code = (
+            macropad.ConsumerControlCode.VOLUME_INCREMENT
+            if curr_dir > 0
+            else macropad.ConsumerControlCode.VOLUME_DECREMENT
+        )
+        for _ in range(abs(step)):
+            cc.send(code)
+        play_sound(900 if curr_dir > 0 else 700, 0.015)
+
+    elif action == "SCROLL_V":
+        wheel_delta = -step
+        macropad.mouse.move(wheel=wheel_delta)
+
+    elif action == "SCROLL_H":
+        wheel_delta = -step
+        macropad.keyboard.press(K.SHIFT)
+        macropad.mouse.move(wheel=wheel_delta)
+        macropad.keyboard.release(K.SHIFT)
+
+    elif action == "ZOOM":
+        mod = K.GUI if is_mac else K.CONTROL
+        wheel_delta = step
+        macropad.keyboard.press(mod)
+        macropad.mouse.move(wheel=wheel_delta)
+        macropad.keyboard.release(mod)
+
+    elif action == "TRACK":
+        code = (
+            macropad.ConsumerControlCode.SCAN_NEXT_TRACK
+            if curr_dir > 0
+            else macropad.ConsumerControlCode.SCAN_PREVIOUS_TRACK
+        )
+        cc.send(code)
+        play_sound(1000 if curr_dir > 0 else 600, 0.03)
+
+    elif action == "TABS":
+        mod = K.GUI if is_mac else K.CONTROL
+        if curr_dir > 0:
+            macropad.keyboard.send(mod, K.TAB)
+        else:
+            macropad.keyboard.send(mod, K.SHIFT, K.TAB)
+
+    elif action == "UNDO_REDO":
+        mod = K.GUI if is_mac else K.CONTROL
+        if curr_dir > 0:
+            if is_mac:
+                macropad.keyboard.send(mod, K.SHIFT, K.Z)
+            else:
+                macropad.keyboard.send(mod, K.Y)
+        else:
+            macropad.keyboard.send(mod, K.Z)
+
+    elif action == "BRIGHTNESS":
+        bright_inc = getattr(macropad.ConsumerControlCode, "BRIGHTNESS_INCREMENT", None)
+        bright_dec = getattr(macropad.ConsumerControlCode, "BRIGHTNESS_DECREMENT", None)
+        if bright_inc and bright_dec:
+            code = bright_inc if curr_dir > 0 else bright_dec
+            for _ in range(abs(step)):
+                cc.send(code)
+
+def handle_knob_push():
+    prof = cur_prof()
+    if active_knob_key is None or active_knob_key >= len(prof["keys"]):
+        return
+    item = prof["keys"][active_knob_key]
+    action = item.get("action", "VOLUME")
+    is_mac = (prof.get("os") == "MAC")
+    cc = macropad.consumer_control
+
+    if action == "VOLUME":
+        cc.send(macropad.ConsumerControlCode.MUTE)
+        play_sound(600, 0.04)
+
+    elif action in ("SCROLL_V", "SCROLL_H"):
+        mid_btn = getattr(macropad, "Mouse", None)
+        mid_btn_val = getattr(mid_btn, "MIDDLE_BUTTON", 4) if mid_btn else 4
+        macropad.mouse.press(mid_btn_val)
+        time.sleep(0.05)
+        macropad.mouse.release_all()
+        play_sound(800, 0.02)
+
+    elif action == "ZOOM":
+        mod = K.GUI if is_mac else K.CONTROL
+        macropad.keyboard.send(mod, K.ZERO)
+        play_sound(1000, 0.04)
+
+    elif action == "TRACK":
+        cc.send(macropad.ConsumerControlCode.PLAY_PAUSE)
+        play_sound(800, 0.04)
+
+    elif action == "TABS":
+        mod = K.GUI if is_mac else K.CONTROL
+        macropad.keyboard.send(mod, K.W)
+        play_sound(500, 0.04)
+
+    elif action == "UNDO_REDO":
+        macropad.keyboard.send(K.ESCAPE)
+        play_sound(400, 0.03)
+
 update_leds()
 render_screen()
 
@@ -519,6 +659,7 @@ while True:
                                     config["active"] = 0
                                 save_config()
                                 active_toggles.clear()
+                                active_knob_key = None
                                 mode = "OVERVIEW"
                                 wake_up()
                                 update_leds()
@@ -558,9 +699,12 @@ while True:
         last_encoder = macropad.encoder
 
         if mode == "OVERVIEW":
-            mode = "SELECT_KEY"
-            update_leds()
-            render_screen()
+            if active_knob_key is not None:
+                handle_knob_push()
+            else:
+                mode = "SELECT_KEY"
+                update_leds()
+                render_screen()
 
         elif mode == "SELECT_KEY":
             menu_idx = 0
@@ -591,6 +735,7 @@ while True:
                     save_config()
                     play_sound(300, 0.1)
                     active_toggles.clear()
+                    active_knob_key = None
                     mode = "OVERVIEW"
                     update_leds()
                     render_screen("Page Deleted!")
@@ -638,7 +783,7 @@ while True:
                     "name": final_name,
                     "os": temp_page_os,
                     "theme": temp_page_theme,
-                    "keys": clone_keys(PRESETS)
+                    "keys": clone_keys(PRESETS[:12])
                 }
                 config["profiles"].append(new_p)
                 config["active"] = len(config["profiles"]) - 1
@@ -666,6 +811,9 @@ while True:
                 text_page_idx = 0
                 text_upper = False
                 mode = "BUILD_TEXT"
+            elif choice == "Knob Function":
+                menu_idx = 0
+                mode = "PICK_KNOB_ACTION"
             elif choice == "Set Key Colour":
                 curr_c = prof["keys"][selected_key].get("color", None)
                 menu_idx = 0
@@ -699,6 +847,23 @@ while True:
             mode = "OVERVIEW"
             update_leds()
             render_screen("Saved!")
+
+        elif mode == "PICK_KNOB_ACTION":
+            act_label, act_id, default_lbl = KNOB_ACTIONS[menu_idx]
+            existing_color = prof["keys"][selected_key].get("color", None)
+            prof["keys"][selected_key] = {
+                "label": default_lbl,
+                "type": "KNOB",
+                "action": act_id,
+                "color": existing_color,
+                "behavior": "TOGGLE"
+            }
+            edit_string = default_lbl
+            text_page_idx = 0
+            text_upper = True
+            mode = "BUILD_LABEL"
+            update_leds()
+            render_screen()
 
         elif mode == "PICK_COLOR":
             prof["keys"][selected_key]["color"] = COLOR_PALETTE[menu_idx][1]
@@ -792,11 +957,14 @@ while True:
         step = curr_dir if abs(delta) <= 2 else delta
 
         if mode == "OVERVIEW":
-            config["active"] = (config["active"] + step) % len(config["profiles"])
-            save_config()
-            update_leds()
-            render_screen()
-            play_sound(500 + (config["active"] * 150), 0.06)
+            if active_knob_key is not None:
+                execute_knob_rotate(step, curr_dir)
+            else:
+                config["active"] = (config["active"] + step) % len(config["profiles"])
+                save_config()
+                update_leds()
+                render_screen()
+                play_sound(500 + (config["active"] * 150), 0.06)
         elif mode == "SELECT_KEY":
             mode = "OVERVIEW"
             update_leds()
@@ -813,6 +981,9 @@ while True:
             render_screen()
         elif mode == "CHOOSE_TYPE":
             menu_idx = (menu_idx + step) % len(EDIT_TYPES)
+            render_screen()
+        elif mode == "PICK_KNOB_ACTION":
+            menu_idx = (menu_idx + step) % len(KNOB_ACTIONS)
             render_screen()
         elif mode == "PICK_PRESET":
             menu_idx = (menu_idx + step) % len(PRESETS)
@@ -843,9 +1014,23 @@ while True:
         if key_event.pressed:
             if mode == "OVERVIEW":
                 item = prof["keys"][k]
+                atype = item.get("type", "COMBO")
                 beh = item.get("behavior", "NORMAL")
 
-                if beh == "TOGGLE":
+                if atype == "KNOB":
+                    if active_knob_key == k:
+                        active_toggles.discard(k)
+                        active_knob_key = None
+                        play_sound(300, 0.04)
+                    else:
+                        if active_knob_key is not None:
+                            active_toggles.discard(active_knob_key)
+                        active_toggles.add(k)
+                        active_knob_key = k
+                        play_sound(900, 0.04)
+                    update_leds()
+                    render_screen()
+                elif beh == "TOGGLE":
                     if k in active_toggles:
                         active_toggles.remove(k)
                         execute_action(item, state_active=False)
@@ -901,6 +1086,6 @@ while True:
 
         elif not key_event.pressed and mode == "OVERVIEW":
             item = prof["keys"][k]
-            if item.get("behavior", "NORMAL") == "HOLD":
+            if item.get("type") != "KNOB" and item.get("behavior", "NORMAL") == "HOLD":
                 execute_action(item, state_active=False)
                 update_leds()

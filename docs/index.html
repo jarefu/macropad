@@ -205,6 +205,7 @@
               <option value="TEXT">Text String / Macro</option>
               <option value="MEDIA">Media Control</option>
               <option value="SPECIAL">Special (Mouse Jiggler)</option>
+              <option value="KNOB">Rotary Knob Toggle</option>
             </select>
           </div>
         </div>
@@ -247,6 +248,22 @@
             <label>Special Function</label>
             <select id="selSpecialAction" onchange="saveKeyChanges()">
               <option value="JIGGLER">Mouse Jiggler (Moves cursor every 30s when toggled)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="sectionKnob" style="display:none;">
+          <div class="form-group">
+            <label>Knob Control Function</label>
+            <select id="selKnobAction" onchange="onKnobActionChange()">
+              <option value="VOLUME">Volume Control (CW: Vol+, CCW: Vol-, Click: Mute)</option>
+              <option value="SCROLL_V">Vertical Scroll (Mouse Wheel, Click: Middle Click)</option>
+              <option value="SCROLL_H">Horizontal Scroll (Shift + Wheel, Click: Middle Click)</option>
+              <option value="ZOOM">Zoom In / Out (Ctrl/Cmd + Wheel, Click: Reset Zoom)</option>
+              <option value="TRACK">Media Track (CW: Next, CCW: Prev, Click: Play/Pause)</option>
+              <option value="TABS">Browser / App Tabs (Ctrl+Tab / Ctrl+Shift+Tab, Click: Close Tab)</option>
+              <option value="UNDO_REDO">Undo / Redo Scrub (Ctrl+Y / Ctrl+Z)</option>
+              <option value="BRIGHTNESS">Display Brightness</option>
             </select>
           </div>
         </div>
@@ -324,7 +341,10 @@ const PRESETS = [
   {"label": "Mute",   "type": "MEDIA",   "action": "MUTE",        "color": null, "behavior": "NORMAL"},
   {"label": "Play",   "type": "MEDIA",   "action": "PLAY_PAUSE",  "color": null, "behavior": "NORMAL"},
   {"label": "Jiggle", "type": "SPECIAL", "action": "JIGGLER",     "color": 0x004400, "behavior": "TOGGLE"},
-  {"label": "Screen", "type": "COMBO",   "mods": ["OS_SCREEN"],   "key": "S",   "color": null, "behavior": "NORMAL"}
+  {"label": "Screen", "type": "COMBO",   "mods": ["OS_SCREEN"],   "key": "S",   "color": null, "behavior": "NORMAL"},
+  {"label": "K-Vol",  "type": "KNOB",    "action": "VOLUME",      "color": 0x004444, "behavior": "TOGGLE"},
+  {"label": "K-ScV",  "type": "KNOB",    "action": "SCROLL_V",    "color": 0x440044, "behavior": "TOGGLE"},
+  {"label": "K-Zoom", "type": "KNOB",    "action": "ZOOM",        "color": 0x444400, "behavior": "TOGGLE"}
 ];
 
 // ============================================================================
@@ -334,8 +354,8 @@ let config = {
   active: 0,
   sound: true,
   profiles: [
-    { name: "PC 1", os: "PC", theme: 0x002244, keys: JSON.parse(JSON.stringify(PRESETS)) },
-    { name: "MAC 1", os: "MAC", theme: 0x330044, keys: JSON.parse(JSON.stringify(PRESETS)) }
+    { name: "PC 1", os: "PC", theme: 0x002244, keys: JSON.parse(JSON.stringify(PRESETS.slice(0, 12))) },
+    { name: "MAC 1", os: "MAC", theme: 0x330044, keys: JSON.parse(JSON.stringify(PRESETS.slice(0, 12))) }
   ]
 };
 let selectedKey = 0;
@@ -463,6 +483,7 @@ function loadKeyIntoForm() {
   document.getElementById("inpKeyText").value = kItem.text || "";
   document.getElementById("selMediaAction").value = kItem.action || "VOL_UP";
   document.getElementById("selSpecialAction").value = kItem.action || "JIGGLER";
+  document.getElementById("selKnobAction").value = kItem.action || "VOLUME";
 
   updateVisibleSections();
 }
@@ -473,13 +494,41 @@ function updateVisibleSections() {
   document.getElementById("sectionText").style.display    = type === "TEXT" ? "block" : "none";
   document.getElementById("sectionMedia").style.display   = type === "MEDIA" ? "block" : "none";
   document.getElementById("sectionSpecial").style.display = type === "SPECIAL" ? "block" : "none";
+  document.getElementById("sectionKnob").style.display    = type === "KNOB" ? "block" : "none";
 }
 
 // ============================================================================
 // EDIT HANDLERS
 // ============================================================================
 function onKeyTypeChange() {
+  const type = document.getElementById("selKeyType").value;
+  if (type === "KNOB") {
+    document.getElementById("selKeyBehavior").value = "TOGGLE";
+    const curLabel = document.getElementById("inpKeyLabel").value.trim();
+    if (!curLabel || curLabel === "Macro" || curLabel.startsWith("Key")) {
+      document.getElementById("inpKeyLabel").value = "K-Vol";
+    }
+  }
   updateVisibleSections();
+  saveKeyChanges();
+}
+
+function onKnobActionChange() {
+  const act = document.getElementById("selKnobAction").value;
+  const labels = {
+    "VOLUME": "K-Vol",
+    "SCROLL_V": "K-ScV",
+    "SCROLL_H": "K-ScH",
+    "ZOOM": "K-Zoom",
+    "TRACK": "K-Trk",
+    "TABS": "K-Tabs",
+    "UNDO_REDO": "K-Undo",
+    "BRIGHTNESS": "K-Brt"
+  };
+  const curLabel = document.getElementById("inpKeyLabel").value.trim();
+  if (!curLabel || Object.values(labels).includes(curLabel) || curLabel === "Macro") {
+    document.getElementById("inpKeyLabel").value = labels[act] || "Knob";
+  }
   saveKeyChanges();
 }
 
@@ -514,6 +563,9 @@ function saveKeyChanges() {
     updated.action = document.getElementById("selMediaAction").value;
   } else if (type === "SPECIAL") {
     updated.action = document.getElementById("selSpecialAction").value;
+  } else if (type === "KNOB") {
+    updated.action = document.getElementById("selKnobAction").value;
+    updated.behavior = "TOGGLE";
   }
 
   prof.keys[selectedKey] = updated;
@@ -559,7 +611,7 @@ function addNewProfile() {
     name: `PC ${num}`.slice(0, 6),
     os: "PC",
     theme: 0x002244,
-    keys: JSON.parse(JSON.stringify(PRESETS))
+    keys: JSON.parse(JSON.stringify(PRESETS.slice(0, 12)))
   });
   config.active = config.profiles.length - 1;
   refreshAll();
