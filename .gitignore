@@ -1,0 +1,15 @@
+# Ignore CMake and Pico SDK build directory contents, except the final .uf2 firmware
+c/build/*
+!c/build/*.uf2
+
+# Intermediate compiler outputs
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.dis
+
+# Editor configuration
+.vscode/
