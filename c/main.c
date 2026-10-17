@@ -163,14 +163,6 @@ static uint32_t get_key_color(int k_idx, bool has_override, int32_t override_val
 }
 
 static void update_leds(void) {
-    if (s_is_sleeping) {
-        for (int i = 0; i < 12; i++) {
-            hw_pixel_set(i, 0x000000);
-        }
-        hw_pixels_show();
-        return;
-    }
-
     if (s_mode == MODE_BUILD_TEXT || s_mode == MODE_BUILD_LABEL || s_mode == MODE_PAGE_NAME) {
         for (int i = 0; i < 9; i++) {
             hw_pixel_set(i, 0x003344);
@@ -710,7 +702,6 @@ int main(void) {
         // --- SLEEP TIMER CHECK (3 MINUTES = 180,000 ms) ---
         if (!s_is_sleeping && (now_ms - s_last_activity_ms > 180000ULL) && s_mode == MODE_OVERVIEW) {
             s_is_sleeping = true;
-            update_leds();
             hw_display_set_sleep(true);
         }
 

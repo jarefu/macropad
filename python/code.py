@@ -245,11 +245,6 @@ def get_key_color(k_idx, override_val="NO_OVERRIDE"):
     return c_val
 
 def update_leds():
-    if is_sleeping:
-        for i in range(12):
-            macropad.pixels[i] = 0x000000
-        return
-
     if mode in ("BUILD_TEXT", "BUILD_LABEL", "PAGE_NAME"):
         for i in range(9):
             macropad.pixels[i] = 0x003344
@@ -679,7 +674,6 @@ while True:
     # --- SLEEP TIMER CHECK (3 MINUTES) ---
     if not is_sleeping and (now - last_activity_time > 180.0) and mode == "OVERVIEW":
         is_sleeping = True
-        update_leds()
         macropad.display.root_group = None
         macropad.display.refresh()
 

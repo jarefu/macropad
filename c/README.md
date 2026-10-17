@@ -25,7 +25,7 @@ It provides full 1:1 feature parity with the CircuitPython firmware in `../pytho
   - **1kHz Interrupt-Driven Quadrature Encoder** on `GP17`/`GP18` + debounced push switch on `GP0`.
   - **12x Debounced Mechanical Keys** on `GP1`–`GP12`.
   - **Hardware PWM Audio Tone Generator** on `GP16` with Class-D amplifier enable on `GP14`.
-  - **3-Minute Auto-Sleep Timer** turning off the OLED and NeoPixels when idle in `OVERVIEW` mode.
+  - **3-Minute Auto-Sleep Timer** turning off the OLED display when idle in `OVERVIEW` mode while keeping keys illuminated.
 
 ---
 
